@@ -307,10 +307,20 @@ class AcexyProxy:
             ongoing.clients.add(response)
             client_count = len(ongoing.clients)
             logger.info(f"Stream {key} now has {client_count} client(s)")
-            
+
             # Check if stream is already active (like Go checks player != nil at line 178)
-            if ongoing.task is None or ongoing.task.done():
-                # Stream not active, need to start it
+            # Also check if stream is really alive by checking if it's been marked as done
+            stream_is_dead = ongoing.task is None or ongoing.task.done() or ongoing.done.is_set()
+
+            if stream_is_dead:
+                # Stream not active or died, need to (re)start it
+                if ongoing.done.is_set():
+                    # Stream died, reset events for restart
+                    logger.warning(f"Stream {key} was dead, restarting...")
+                    ongoing.done.clear()
+                    ongoing.started.clear()
+                    ongoing.first_chunk.clear()
+
                 need_to_wait = True
                 ongoing.task = asyncio.create_task(self._start_acestream_fetch(ongoing))
             # else: stream already active, just return (like Go's return at line 179)
